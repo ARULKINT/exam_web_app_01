@@ -40,6 +40,8 @@ export const testsAPI = {
 
 export const resultsAPI = {
   submit: (test_id, answers, time_taken) => api.post('/results/submit', { test_id, answers, time_taken }),
+  submitPractice: (questionIds, answers, timeTaken) =>
+    api.post('/results/submit-practice', { question_ids: questionIds, answers, time_taken: timeTaken }),
   get: (id) => api.get(`/results/${id}`),
   history: () => api.get('/results/my/history'),
   leaderboard: () => api.get('/results/leaderboard/weekly'),

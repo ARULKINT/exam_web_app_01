@@ -39,41 +39,9 @@ export default function ResultsPage() {
       const stored = localStorage.getItem('quiz_result');
       if (stored) {
         const data = JSON.parse(stored);
-        const { questions, answers, time_taken, subject, type } = data;
-
-        let correct = 0, wrong = 0, skipped = 0;
-        const rev = questions.map(q => {
-          const ua = answers[q.id] || null;
-          const isCorrect = ua === q.correct_ans;
-          if (!ua) skipped++;
-          else if (isCorrect) correct++;
-          else wrong++;
-          return {
-            question_id: q.id,
-            question: q.question,
-            option_a: q.option_a,
-            option_b: q.option_b,
-            option_c: q.option_c,
-            option_d: q.option_d,
-            user_answer: ua,
-            correct_ans: q.correct_ans,
-            explanation: q.explanation,
-            is_correct: isCorrect,
-          };
-        });
-
-        const score = correct * 10 - wrong * 2;
-        setResult({
-          score: Math.max(0, score),
-          total_marks: questions.length * 10,
-          correct_count: correct,
-          wrong_count: wrong,
-          skipped_count: skipped,
-          time_taken,
-          subject,
-          type,
-        });
-        setReview(rev);
+        const { result, review, subject, type } = data;
+        setResult({ ...result, subject, type });
+        setReview(review || []);
       }
       setLoading(false);
     }

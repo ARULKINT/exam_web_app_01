@@ -6,6 +6,64 @@ const router = express.Router();
 const POINTS_CORRECT = 10;
 const POINTS_WRONG = -2;
 
+// Submit practice quiz (no pre-created test)
+router.post('/submit-practice', authMiddleware, async (req, res) => {
+  const { question_ids, answers, time_taken } = req.body;
+  if (!question_ids || !answers) {
+    return res.status(400).json({ error: 'question_ids and answers are required' });
+  }
+
+  const { data: questions, error } = await supabase
+    .from('questions')
+    .select('id, question, option_a, option_b, option_c, option_d, correct_ans, explanation, difficulty')
+    .in('id', question_ids);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  let correct = 0, wrong = 0, skipped = 0;
+  const review = questions.map(q => {
+    const ua = answers[String(q.id)] || null;
+    const isCorrect = ua === q.correct_ans;
+    if (!ua) skipped++;
+    else if (isCorrect) correct++;
+    else wrong++;
+    return {
+      question_id: q.id,
+      question: q.question,
+      option_a: q.option_a, option_b: q.option_b,
+      option_c: q.option_c, option_d: q.option_d,
+      correct_ans: q.correct_ans,
+      explanation: q.explanation,
+      user_answer: ua,
+      is_correct: isCorrect,
+      difficulty: q.difficulty,
+    };
+  });
+
+  const score = Math.max(0, correct * POINTS_CORRECT + wrong * POINTS_WRONG);
+  const total_marks = questions.length * POINTS_CORRECT;
+
+  const { data: result, error: insertError } = await supabase
+    .from('test_results')
+    .insert({
+      user_id: req.user.id,
+      test_id: null,
+      score, total_marks,
+      time_taken: time_taken || 0,
+      correct_count: correct,
+      wrong_count: wrong,
+      skipped_count: skipped,
+    })
+    .select()
+    .single();
+
+  if (insertError) return res.status(500).json({ error: insertError.message });
+
+  await supabase.rpc('increment_points', { user_id: req.user.id, points: score });
+
+  res.json({ result, review });
+});
+
 // Submit test result
 router.post('/submit', authMiddleware, async (req, res) => {
   const { test_id, answers, time_taken } = req.body;

@@ -4,6 +4,15 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { testsAPI, questionsAPI, resultsAPI } from '@/lib/api';
 
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function Timer({ seconds, onTimeUp }) {
   const [left, setLeft] = useState(seconds);
   useEffect(() => {
@@ -44,16 +53,16 @@ export default function QuizPage() {
     async function load() {
       try {
         if (type === 'daily' || type === 'practice') {
-          const params = { limit: type === 'daily' ? 10 : 20 };
+          const params = { limit: type === 'daily' ? 10 : 30 };
           if (difficulty) params.difficulty = difficulty;
 
           const subs = await questionsAPI.subjects();
           const sub = subs.find(s => s.id === Number(id));
           setSubject(sub);
-          setDuration(type === 'daily' ? 600 : 1200);
+          setDuration(type === 'daily' ? 600 : 1800);
 
           const qs = await questionsAPI.bySubject(id, params);
-          setQuestions(qs);
+          setQuestions(shuffle(qs));
         } else {
           const test = await testsAPI.get(id);
           setSubject(test);
@@ -69,43 +78,33 @@ export default function QuizPage() {
   }, [id, type, difficulty]);
 
   const handleSubmit = useCallback(async () => {
+    if (submitting) return;
     setSubmitting(true);
     const timeTaken = Math.floor((Date.now() - startTime.current) / 1000);
 
     try {
-      const testId = type === 'practice' || type === 'daily' ? `practice_${id}` : id;
-      const answerMap = {};
-      questions.forEach(q => {
-        answerMap[q.id] = answers[q.id] || '';
-      });
-
-      // For practice/daily, fetch answers directly
-      const reviewData = await Promise.all(
-        questions.map(async (q) => {
-          const ans = await questionsAPI.bySubject(id, { limit: 1 });
-          return { question_id: q.id, user_answer: answers[q.id] || null };
-        })
-      );
-
-      // Store result in localStorage for results page
-      const correct = questions.filter(q => {
-        return answers[q.id] && answers[q.id] === q.correct_ans;
-      }).length;
-
-      localStorage.setItem('quiz_result', JSON.stringify({
-        questions,
-        answers,
-        time_taken: timeTaken,
-        subject: subject?.name,
-        type,
-      }));
-
-      router.push(`/results/practice?subjectId=${id}`);
+      if (type === 'practice' || type === 'daily') {
+        const questionIds = questions.map(q => q.id);
+        const response = await resultsAPI.submitPractice(questionIds, answers, timeTaken);
+        localStorage.setItem('quiz_result', JSON.stringify({
+          result: response.result,
+          review: response.review,
+          subject: subject?.name,
+          type,
+        }));
+        router.push('/results/practice');
+      } else {
+        // Formal test submission
+        const answerMap = {};
+        questions.forEach(q => { answerMap[q.id] = answers[q.id] || ''; });
+        const response = await resultsAPI.submit(id, answerMap, timeTaken);
+        router.push(`/results/${response.result.id}`);
+      }
     } catch (err) {
       console.error(err);
       setSubmitting(false);
     }
-  }, [answers, questions, id, type, subject, router]);
+  }, [answers, questions, id, type, subject, router, submitting]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

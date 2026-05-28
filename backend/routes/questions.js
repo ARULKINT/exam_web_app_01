@@ -13,16 +13,29 @@ router.get('/subjects', async (req, res) => {
   res.json(data);
 });
 
-// Get questions by subject
+// Get questions by subject (random sample)
 router.get('/subject/:subjectId', authMiddleware, async (req, res) => {
   const { subjectId } = req.params;
-  const { limit = 20, difficulty, offset = 0 } = req.query;
+  const { limit = 30, difficulty } = req.query;
+  const n = Math.min(Number(limit), 50);
+
+  // Get total count first for random offset
+  let countQuery = supabase
+    .from('questions')
+    .select('id', { count: 'exact', head: true })
+    .eq('subject_id', subjectId);
+  if (difficulty) countQuery = countQuery.eq('difficulty', difficulty);
+  const { count } = await countQuery;
+
+  // Pick a random starting offset so each session is fresh
+  const maxOffset = Math.max(0, (count || 0) - n);
+  const offset = maxOffset > 0 ? Math.floor(Math.random() * maxOffset) : 0;
 
   let query = supabase
     .from('questions')
     .select('id, question, option_a, option_b, option_c, option_d, has_image, image_url, difficulty')
     .eq('subject_id', subjectId)
-    .range(Number(offset), Number(offset) + Number(limit) - 1);
+    .range(offset, offset + n - 1);
 
   if (difficulty) query = query.eq('difficulty', difficulty);
 
